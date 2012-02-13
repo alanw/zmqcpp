@@ -251,11 +251,11 @@ TEST_F(zmqcpp_fixture, test_socket_setsockopt_int64) {
   Context ctx;
 
   Socket test_sock = ctx.socket(push);
-  test_sock.setsockopt(affinity, 123456789LL);
+  test_sock.setsockopt(affinity, (int64_t)123456789);
 
   int64_t test_affinity = 0;
   test_sock.getsockopt(affinity, test_affinity);
-  ASSERT_EQ(test_affinity, 123456789LL);
+  ASSERT_EQ(test_affinity, (int64_t)123456789);
 }
 
 TEST_F(zmqcpp_fixture, test_socket_setsockopt_string) {

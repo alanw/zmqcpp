@@ -90,6 +90,7 @@
 #include <deque>
 #include <algorithm>
 #include <stdexcept>
+#include <stdint.h>
 
 #ifdef USE_ZMQ3
 #include <zmq3/zmq.h>
