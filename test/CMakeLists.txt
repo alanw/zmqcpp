@@ -32,6 +32,6 @@ add_executable(test_zmqcpp ${test_sources})
 target_link_libraries(test_zmqcpp
     ${GTEST_BOTH_LIBRARIES}
     ${GMOCK_BOTH_LIBRARIES}
-    zmq3
+    zmq
 )
 gtest_add_tests(test_zmqcpp "--gtest_output=xml" ${test_sources})

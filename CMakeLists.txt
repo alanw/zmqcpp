@@ -5,7 +5,7 @@ cmake_minimum_required (VERSION 2.8.3)
 project (zmqcpp)
 set (zmqcpp_VERSION_MAJOR 1)
 set (zmqcpp_VERSION_MINOR 0)
-set (zmqcpp_VERSION_PATCH 0)
+set (zmqcpp_VERSION_PATCH 1)
 set (zmqcpp_VERSION "${zmqcpp_VERSION_MAJOR}.${zmqcpp_VERSION_MINOR}.${zmqcpp_VERSION_PATCH}")
 
 
@@ -28,6 +28,10 @@ configure_file(zmqcpp.pc.cmake ${PKGCONFIG_FILE} @ONLY)
 
 install(FILES ${PKGCONFIG_FILE}
     DESTINATION lib/pkgconfig
+)
+
+install(FILES include/zmqcpp.h
+    DESTINATION include
 )
 
 

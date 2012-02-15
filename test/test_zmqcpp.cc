@@ -6,8 +6,8 @@
 //
 
 #include <gtest/gtest.h>
+#include <zmq.h>
 
-#define USE_ZMQ3
 #include "zmqcpp.h"
 
 using namespace zmqcpp;
@@ -196,10 +196,10 @@ TEST_F(zmqcpp_fixture, test_copy_message) {
 TEST_F(zmqcpp_fixture, test_socket_single_frame) {
   Context ctx;
 
-  Socket bind_sock = ctx.socket(rep);
+  Socket bind_sock = ctx.socket(pair);
   ASSERT_TRUE(bind_sock.bind("tcp://*:4050"));
 
-  Socket connect_sock = ctx.socket(req);
+  Socket connect_sock = ctx.socket(pair);
   ASSERT_TRUE(connect_sock.connect("tcp://localhost:4050"));
 
   Message send_msg;
@@ -281,7 +281,7 @@ TEST_F(zmqcpp_fixture, test_socket_getsockopt_invalid_type) {
   int32_t test_affinity = 0;
   ASSERT_ANY_THROW(test_sock.getsockopt(affinity, test_affinity));
   int64_t test_rcvbuf = 0;
-  ASSERT_ANY_THROW(test_sock.getsockopt(rcvbuf, test_rcvbuf));
+  ASSERT_ANY_THROW(test_sock.getsockopt(linger, test_rcvbuf));
   std::string test_linger;
   ASSERT_ANY_THROW(test_sock.getsockopt(linger, test_linger));
 }
@@ -291,10 +291,10 @@ TEST_F(zmqcpp_fixture, test_socket_send_noblock) {
 
   Socket test_sock = ctx.socket(push);
   test_sock.setsockopt(linger, 0);
-  #ifdef USE_ZMQ3
+  #if (ZMQ_VERSION_MAJOR >= 3)
   test_sock.setsockopt(sndhwm, 10);
   #else
-  test_sock.setsockopt(hwm, 10);
+  test_sock.setsockopt(hwm, (int64_t)10);
   #endif
   test_sock.connect("tcp://localhost:4050");
 

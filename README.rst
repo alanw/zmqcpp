@@ -1,7 +1,7 @@
 ZMQ C++ wrapper (with no added magic)
 =====================================
 
-Welcome to the super-thin C++ wrapper for zmq version **1.0.0**.
+Welcome to the super-thin C++ wrapper for zmq version **1.0.1**.
 
 
 Features
@@ -18,7 +18,6 @@ Usage
 
 To connect to another zmq socket and send a message::
 
-    #define USE_ZMQ3 // if this is not defined then zmq2 is assumed
     #include "zmqcpp.h"
 
     using namespace zmqcpp
@@ -36,7 +35,6 @@ To connect to another zmq socket and send a message::
 
 To bind a zmq socket and receive a message::
 
-    #define USE_ZMQ3 // if this is not defined then zmq2 is assumed
     #include "zmqcpp.h"
 
     using namespace zmqcpp
@@ -62,7 +60,6 @@ To bind a zmq socket and receive a message::
 
 To poll a zmq socket::
 
-    #define USE_ZMQ3 // if this is not defined then zmq2 is assumed
     #include "zmqcpp.h"
 
     using namespace zmqcpp
