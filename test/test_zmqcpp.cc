@@ -14,11 +14,14 @@ using namespace zmqcpp;
 
 class zmqcpp_fixture : public testing::Test {
 protected:
-  void assert_equal(const Message& msg1, const Message& msg2) {
+  void assert_equal(const Message& msg1, const Message& msg2, bool same = false) {
     ASSERT_EQ(msg1.size(), msg2.size());
-    for (Message::size_type frame = 0, last = msg1.size() - 1; frame != last; ++ frame) {
-      ASSERT_EQ(zmq_msg_size(const_cast<zmq_msg_t*>(&msg1[frame])), zmq_msg_size(const_cast<zmq_msg_t*>(&msg2[frame])));
-      ASSERT_TRUE(memcmp(zmq_msg_data(const_cast<zmq_msg_t*>(&msg1[frame])), zmq_msg_data(const_cast<zmq_msg_t*>(&msg2[frame])), zmq_msg_size(const_cast<zmq_msg_t*>(&msg1[frame]))) == 0);
+    for (uint32_t part = 0, last = msg1.size() - 1; part != last; ++part) {
+      ASSERT_EQ(zmq_msg_size(const_cast<zmq_msg_t*>(&msg1.at(part))), zmq_msg_size(const_cast<zmq_msg_t*>(&msg2.at(part))));
+      if (!same) {
+        ASSERT_NE(zmq_msg_data(const_cast<zmq_msg_t*>(&msg1.at(part))), zmq_msg_data(const_cast<zmq_msg_t*>(&msg2.at(part))));
+      }
+      ASSERT_TRUE(memcmp(zmq_msg_data(const_cast<zmq_msg_t*>(&msg1.at(part))), zmq_msg_data(const_cast<zmq_msg_t*>(&msg2.at(part))), zmq_msg_size(const_cast<zmq_msg_t*>(&msg1.at(part)))) == 0);
     }
   }
 };
@@ -34,21 +37,16 @@ TEST_F(zmqcpp_fixture, test_message_buffer) {
   assert_equal(first_msg, second_msg);
 }
 
-TEST_F(zmqcpp_fixture, test_message_buffer_no_copy) {
-  const char input_buffer[] = "this is a test message";
+TEST_F(zmqcpp_fixture, test_message_to_string) {
+  const char buffer[] = "this is a test message";
 
-  Message test_msg;
-  test_msg.push(input_buffer, sizeof(input_buffer));
+  Message input_msg(buffer, sizeof(buffer));
+  std::string test_output = Message::to_string(input_msg.front());
 
-  void* output_buffer;
-  size_t output_size;
-
-  test_msg.pop(&output_buffer, &output_size);
-
-  ASSERT_EQ((void*)input_buffer, (void*)output_buffer);
+  ASSERT_STREQ(test_output.c_str(), "this is a test message");
 }
 
-TEST_F(zmqcpp_fixture, test_serialize_single_frame) {
+TEST_F(zmqcpp_fixture, test_serialize_single_part) {
   Message first_msg;
   first_msg << "hello world";
 
@@ -58,7 +56,7 @@ TEST_F(zmqcpp_fixture, test_serialize_single_frame) {
   assert_equal(first_msg, second_msg);
 }
 
-TEST_F(zmqcpp_fixture, test_serialize_multiple_frames) {
+TEST_F(zmqcpp_fixture, test_serialize_multiple_parts) {
   Message first_msg;
   first_msg << "hello world" << (uint8_t)123 << true;
 
@@ -68,35 +66,42 @@ TEST_F(zmqcpp_fixture, test_serialize_multiple_frames) {
   assert_equal(first_msg, second_msg);
 }
 
-TEST_F(zmqcpp_fixture, test_deserialize_single_frame) {
+TEST_F(zmqcpp_fixture, test_message_size) {
+  Message test_msg;
+  test_msg << "hello world" << "this is a test";
+
+  ASSERT_EQ(test_msg.message_size(), 25);
+}
+
+TEST_F(zmqcpp_fixture, test_deserialize_single_part) {
   Message test_msg;
   test_msg << "hello world";
 
-  std::string frame;
-  test_msg >> frame;
-  ASSERT_EQ(frame, "hello world");
-  ASSERT_ANY_THROW(test_msg >> frame);
+  std::string part;
+  test_msg >> part;
+  ASSERT_EQ(part, "hello world");
+  ASSERT_ANY_THROW(test_msg >> part);
 }
 
-TEST_F(zmqcpp_fixture, test_deserialize_emoty_message) {
+TEST_F(zmqcpp_fixture, test_deserialize_empty_message) {
   Message test_msg;
 
-  std::string frame;
-  ASSERT_ANY_THROW(test_msg >> frame);
+  std::string part;
+  ASSERT_ANY_THROW(test_msg >> part);
 }
 
-TEST_F(zmqcpp_fixture, test_deserialize_multiple_frames) {
+TEST_F(zmqcpp_fixture, test_deserialize_multiple_parts) {
   Message test_msg;
   test_msg << "hello world" << (uint8_t)123 << true;
 
-  std::string frame1;
-  uint8_t frame2;
-  bool frame3;
+  std::string part1;
+  uint8_t part2;
+  bool part3;
 
-  test_msg >> frame1 >> frame2 >> frame3;
-  ASSERT_EQ(frame1, "hello world");
-  ASSERT_EQ(frame2, 123);
-  ASSERT_EQ(frame3, true);
+  test_msg >> part1 >> part2 >> part3;
+  ASSERT_EQ(part1, "hello world");
+  ASSERT_EQ(part2, 123);
+  ASSERT_EQ(part3, true);
 }
 
 TEST_F(zmqcpp_fixture, test_deserialize_all_types) {
@@ -110,35 +115,35 @@ TEST_F(zmqcpp_fixture, test_deserialize_all_types) {
   test_msg << "a string with \xe1\xbc\xa0\xce\xb9 unicode characters";
   test_msg << (double)3.141;
 
-  uint8_t frame1; int8_t frame2;
-  bool frame3; bool frame4;
-  uint16_t frame5; int16_t frame6;
-  uint32_t frame7; int32_t frame8;
-  uint64_t frame9; int64_t frame10;
-  std::string frame11; std::string frame12;
-  std::string frame13; std::string frame14;
-  double frame15;
+  uint8_t part1; int8_t part2;
+  bool part3; bool part4;
+  uint16_t part5; int16_t part6;
+  uint32_t part7; int32_t part8;
+  uint64_t part9; int64_t part10;
+  std::string part11; std::string part12;
+  std::string part13; std::string part14;
+  double part15;
 
   ASSERT_EQ(test_msg.size(), 15);
-  test_msg >> frame1 >> frame2 >> frame3 >> frame4 >> frame5;
-  test_msg >> frame6 >> frame7 >> frame8 >> frame9 >> frame10;
-  test_msg >> frame11 >> frame12 >> frame13 >> frame14 >> frame15;
+  test_msg >> part1 >> part2 >> part3 >> part4 >> part5;
+  test_msg >> part6 >> part7 >> part8 >> part9 >> part10;
+  test_msg >> part11 >> part12 >> part13 >> part14 >> part15;
 
-  ASSERT_EQ(frame1, 12);
-  ASSERT_EQ(frame2, 23);
-  ASSERT_EQ(frame3, false);
-  ASSERT_EQ(frame4, true);
-  ASSERT_EQ(frame5, 3456);
-  ASSERT_EQ(frame6, 4567);
-  ASSERT_EQ(frame7, 56789);
-  ASSERT_EQ(frame8, 67890);
-  ASSERT_EQ(frame9, 7890123);
-  ASSERT_EQ(frame10, 8901234);
-  ASSERT_EQ(frame11, "short");
-  ASSERT_EQ(frame12, "a somewhat longer string");
-  ASSERT_EQ(frame13, "a string with\0 a null character");
-  ASSERT_EQ(frame14, "a string with \xe1\xbc\xa0\xce\xb9 unicode characters");
-  ASSERT_EQ(frame15, 3.141);
+  ASSERT_EQ(part1, 12);
+  ASSERT_EQ(part2, 23);
+  ASSERT_EQ(part3, false);
+  ASSERT_EQ(part4, true);
+  ASSERT_EQ(part5, 3456);
+  ASSERT_EQ(part6, 4567);
+  ASSERT_EQ(part7, 56789);
+  ASSERT_EQ(part8, 67890);
+  ASSERT_EQ(part9, 7890123);
+  ASSERT_EQ(part10, 8901234);
+  ASSERT_EQ(part11, "short");
+  ASSERT_EQ(part12, "a somewhat longer string");
+  ASSERT_EQ(part13, "a string with\0 a null character");
+  ASSERT_EQ(part14, "a string with \xe1\xbc\xa0\xce\xb9 unicode characters");
+  ASSERT_EQ(part15, 3.141);
 }
 
 namespace {
@@ -176,30 +181,38 @@ TEST_F(zmqcpp_fixture, test_deserialize_invalid) {
   Message test_msg;
   test_msg << true << (uint32_t)123;
 
-  int32_t frame1;
-  int64_t frame2;
+  int32_t part1;
+  int64_t part2;
 
-  ASSERT_ANY_THROW(test_msg >> frame1);
-  ASSERT_ANY_THROW(test_msg >> frame2);
+  ASSERT_ANY_THROW(test_msg >> part1);
+  ASSERT_ANY_THROW(test_msg >> part2);
 }
 
 TEST_F(zmqcpp_fixture, test_copy_message) {
   Message test_msg;
   test_msg << "hello world" << (uint8_t)123 << true;
 
-  Message copy_msg;
-  test_msg.copy(copy_msg);
+  Message copy_msg(test_msg.begin(), test_msg.end());
 
   assert_equal(test_msg, copy_msg);
 }
 
-TEST_F(zmqcpp_fixture, test_socket_single_frame) {
+TEST_F(zmqcpp_fixture, test_copy_ref_message) {
+  Message test_msg;
+  test_msg << "hello world" << (uint8_t)123 << true;
+
+  Message copy_msg(test_msg.begin(), test_msg.end(), false);
+
+  assert_equal(test_msg, copy_msg, true);
+}
+
+TEST_F(zmqcpp_fixture, test_socket_single_part) {
   Context ctx;
 
-  Socket bind_sock = ctx.socket(pair);
+  Socket bind_sock(ctx, pair);
   ASSERT_TRUE(bind_sock.bind("tcp://*:4050"));
 
-  Socket connect_sock = ctx.socket(pair);
+  Socket connect_sock(ctx, pair);
   ASSERT_TRUE(connect_sock.connect("tcp://localhost:4050"));
 
   Message send_msg;
@@ -213,20 +226,19 @@ TEST_F(zmqcpp_fixture, test_socket_single_frame) {
   assert_equal(send_msg, recv_msg);
 }
 
-TEST_F(zmqcpp_fixture, test_socket_multiple_frames) {
+TEST_F(zmqcpp_fixture, test_socket_multiple_parts) {
   Context ctx;
 
-  Socket bind_sock = ctx.socket(rep);
+  Socket bind_sock(ctx, rep);
   ASSERT_TRUE(bind_sock.bind("tcp://*:4050"));
 
-  Socket connect_sock = ctx.socket(req);
+  Socket connect_sock(ctx, req);
   ASSERT_TRUE(connect_sock.connect("tcp://localhost:4050"));
 
   Message send_msg;
   send_msg << "hello world" << (uint8_t)123;
 
-  Message validate_msg;
-  send_msg.copy(validate_msg);
+  Message validate_msg(send_msg.begin(), send_msg.end());
 
   ASSERT_TRUE(connect_sock.send(send_msg));
 
@@ -239,7 +251,7 @@ TEST_F(zmqcpp_fixture, test_socket_multiple_frames) {
 TEST_F(zmqcpp_fixture, test_socket_setsockopt_int32) {
   Context ctx;
 
-  Socket test_sock = ctx.socket(push);
+  Socket test_sock(ctx, push);
   test_sock.setsockopt(linger, 123);
 
   int32_t test_linger = 0;
@@ -250,7 +262,7 @@ TEST_F(zmqcpp_fixture, test_socket_setsockopt_int32) {
 TEST_F(zmqcpp_fixture, test_socket_setsockopt_int64) {
   Context ctx;
 
-  Socket test_sock = ctx.socket(push);
+  Socket test_sock(ctx, push);
   test_sock.setsockopt(affinity, (int64_t)123456789);
 
   int64_t test_affinity = 0;
@@ -261,14 +273,14 @@ TEST_F(zmqcpp_fixture, test_socket_setsockopt_int64) {
 TEST_F(zmqcpp_fixture, test_socket_setsockopt_string) {
   Context ctx;
 
-  Socket test_sock = ctx.socket(sub);
+  Socket test_sock(ctx, sub);
   ASSERT_TRUE(test_sock.setsockopt(subscribe, "hello world"));
 }
 
 TEST_F(zmqcpp_fixture, test_socket_setsockopt_invalid_type) {
   Context ctx;
 
-  Socket test_sock = ctx.socket(sub);
+  Socket test_sock(ctx, sub);
   ASSERT_ANY_THROW(test_sock.setsockopt(subscribe, 123));
   ASSERT_ANY_THROW(test_sock.setsockopt(affinity, 123));
   ASSERT_ANY_THROW(test_sock.setsockopt(linger, "throw"));
@@ -277,7 +289,7 @@ TEST_F(zmqcpp_fixture, test_socket_setsockopt_invalid_type) {
 TEST_F(zmqcpp_fixture, test_socket_getsockopt_invalid_type) {
   Context ctx;
 
-  Socket test_sock = ctx.socket(sub);
+  Socket test_sock(ctx, sub);
   int32_t test_affinity = 0;
   ASSERT_ANY_THROW(test_sock.getsockopt(affinity, test_affinity));
   int64_t test_rcvbuf = 0;
@@ -289,7 +301,7 @@ TEST_F(zmqcpp_fixture, test_socket_getsockopt_invalid_type) {
 TEST_F(zmqcpp_fixture, test_socket_send_noblock) {
   Context ctx;
 
-  Socket test_sock = ctx.socket(push);
+  Socket test_sock(ctx, push);
   test_sock.setsockopt(linger, 0);
   #if (ZMQ_VERSION_MAJOR >= 3)
   test_sock.setsockopt(sndhwm, 10);
@@ -324,7 +336,7 @@ TEST_F(zmqcpp_fixture, test_poller_no_sockets) {
 TEST_F(zmqcpp_fixture, test_poller_timeout) {
   Context ctx;
 
-  Socket test_sock = ctx.socket(pull);
+  Socket test_sock(ctx, pull);
   test_sock.setsockopt(linger, 0);
   test_sock.bind("tcp://*:4050");
 
@@ -337,17 +349,16 @@ TEST_F(zmqcpp_fixture, test_poller_timeout) {
 TEST_F(zmqcpp_fixture, test_poller_single_socket) {
   Context ctx;
 
-  Socket bind_sock = ctx.socket(rep);
+  Socket bind_sock(ctx, rep);
   ASSERT_TRUE(bind_sock.bind("tcp://*:4050"));
 
-  Socket connect_sock = ctx.socket(req);
+  Socket connect_sock(ctx, req);
   ASSERT_TRUE(connect_sock.connect("tcp://localhost:4050"));
 
   Message send_msg;
   send_msg << "hello world";
 
-  Message validate_msg;
-  send_msg.copy(validate_msg);
+  Message validate_msg(send_msg.begin(), send_msg.end());
   ASSERT_TRUE(connect_sock.send(send_msg));
 
   Poller test_poller;
@@ -365,20 +376,19 @@ TEST_F(zmqcpp_fixture, test_poller_single_socket) {
 TEST_F(zmqcpp_fixture, test_poller_multiple_sockets_single_poll) {
   Context ctx;
 
-  Socket bind_sock1 = ctx.socket(rep);
+  Socket bind_sock1(ctx, rep);
   bind_sock1.bind("tcp://*:4050");
 
-  Socket bind_sock2 = ctx.socket(rep);
+  Socket bind_sock2(ctx, rep);
   bind_sock2.bind("tcp://*:4051");
 
-  Socket connect_sock = ctx.socket(req);
+  Socket connect_sock(ctx, req);
   ASSERT_TRUE(connect_sock.connect("tcp://localhost:4050"));
 
   Message send_msg;
   send_msg << "hello world";
 
-  Message validate_msg;
-  send_msg.copy(validate_msg);
+  Message validate_msg(send_msg.begin(), send_msg.end());
   ASSERT_TRUE(connect_sock.send(send_msg));
 
   Poller test_poller;
@@ -398,16 +408,16 @@ TEST_F(zmqcpp_fixture, test_poller_multiple_sockets_single_poll) {
 TEST_F(zmqcpp_fixture, test_poller_multiple_sockets_multiple_poll) {
   Context ctx;
 
-  Socket bind_sock1 = ctx.socket(rep);
+  Socket bind_sock1(ctx, rep);
   bind_sock1.bind("tcp://*:4050");
 
-  Socket bind_sock2 = ctx.socket(rep);
+  Socket bind_sock2(ctx, rep);
   bind_sock2.bind("tcp://*:4051");
 
-  Socket connect_sock1 = ctx.socket(req);
+  Socket connect_sock1(ctx, req);
   connect_sock1.connect("tcp://localhost:4050");
 
-  Socket connect_sock2 = ctx.socket(req);
+  Socket connect_sock2(ctx, req);
   connect_sock2.connect("tcp://localhost:4051");
 
   Message send_msg1;
@@ -416,12 +426,10 @@ TEST_F(zmqcpp_fixture, test_poller_multiple_sockets_multiple_poll) {
   Message send_msg2;
   send_msg2 << "hello again";
 
-  Message validate_msg1;
-  send_msg1.copy(validate_msg1);
+  Message validate_msg1(send_msg1.begin(), send_msg1.end());
   connect_sock1.send(send_msg1);
 
-  Message validate_msg2;
-  send_msg2.copy(validate_msg2);
+  Message validate_msg2(send_msg2.begin(), send_msg2.end());
   connect_sock2.send(send_msg2);
 
   Poller test_poller;
@@ -445,16 +453,16 @@ TEST_F(zmqcpp_fixture, test_poller_multiple_sockets_multiple_poll) {
 TEST_F(zmqcpp_fixture, test_poller_remove_socket) {
   Context ctx;
 
-  Socket bind_sock1 = ctx.socket(rep);
+  Socket bind_sock1(ctx, rep);
   bind_sock1.bind("tcp://*:4050");
 
-  Socket bind_sock2 = ctx.socket(rep);
+  Socket bind_sock2(ctx, rep);
   bind_sock2.bind("tcp://*:4051");
 
-  Socket connect_sock1 = ctx.socket(req);
+  Socket connect_sock1(ctx, req);
   connect_sock1.connect("tcp://localhost:4050");
 
-  Socket connect_sock2 = ctx.socket(req);
+  Socket connect_sock2(ctx, req);
   connect_sock2.connect("tcp://localhost:4051");
 
   Message send_msg1;
@@ -464,8 +472,7 @@ TEST_F(zmqcpp_fixture, test_poller_remove_socket) {
   send_msg2 << "hello again";
   connect_sock2.send(send_msg2);
 
-  Message validate_msg1;
-  send_msg1.copy(validate_msg1);
+  Message validate_msg1(send_msg1.begin(), send_msg1.end());
   connect_sock1.send(send_msg1);
 
   Poller test_poller;

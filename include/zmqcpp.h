@@ -21,7 +21,7 @@
 //   socket.connect("tcp://127.0.0.1:4050");
 //
 //   Message msg;
-//   msg << "first frame" << 123 << "third frame";
+//   msg << "first part" << 123 << "third part";
 //
 //   if (!socket.send(msg))
 //     std::cout << "Send error:" << socket.last_error() << "\n";
@@ -83,6 +83,7 @@
 
 #include <iostream>
 #include <sstream>
+#include <cstring>
 #include <string>
 #include <vector>
 #include <deque>
@@ -146,9 +147,12 @@ enum PollOption {
 };
 
 
-class Message : public std::deque<zmq_msg_t> {
+class Message {
 public:
-  Message() {
+  typedef std::deque<zmq_msg_t> Parts;
+  typedef Parts::const_iterator const_iterator;
+
+  Message() : current(parts.begin()) {
     // default
   }
 
@@ -161,53 +165,90 @@ public:
   }
 
   template <typename Iter>
-  Message(Iter first, Iter last) {
+  Message(Iter first, Iter last, bool copy = true) {
     for (; first != last; ++first) {
-      push(*first);
+      if (!copy) {
+        push(*first);
+      }
+      else {
+        zmq_msg_t copy_part;
+        zmq_msg_init(&copy_part);
+        zmq_msg_copy(&copy_part, const_cast<zmq_msg_t*>(&(*first)));
+        push(copy_part);
+      }
     }
   }
 
   ~Message() {
-    for (iterator frame = begin(), last = end(); frame != last; ++frame) {
-      zmq_msg_close(&(*frame));
-    }
-  }
-
-  void copy(Message& copy_msg) const {
-    for (const_iterator frame = begin(), last = end(); frame != last; ++frame) {
-      zmq_msg_t copy_frame;
-      zmq_msg_init(&copy_frame);
-      zmq_msg_copy(&copy_frame, const_cast<zmq_msg_t*>(&(*frame)));
-      copy_msg.push(copy_frame);
-    }
+    clear();
   }
 
   void push(const zmq_msg_t& msg) {
-    push_back(msg);
+    parts.push_back(msg);
+    current = parts.begin();
   }
 
   void push(const void* data, size_t size, zmq_free_fn* free_fn = 0) {
     zmq_msg_t msg;
-    zmq_msg_init_data(&msg, const_cast<void*>(data), size, free_fn, 0);
+    zmq_msg_init_size(&msg, size);
+    std::memcpy(reinterpret_cast<char*>(zmq_msg_data(&msg)), data, size);
     push(msg);
   }
 
-  void pop(zmq_msg_t& msg) {
-    if (empty()) {
-      throw std::runtime_error("message: no more frames.");
+  const zmq_msg_t& pop() {
+    if (current == parts.end()) {
+      throw std::runtime_error("message: no more parts.");
     }
-    msg = front();
-    pop_front();
+    return *current++;
   }
 
   void pop(void** data, size_t* size) {
-    if (empty()) {
-      throw std::runtime_error("message: no more frames.");
+    const zmq_msg_t& msg = pop();
+    *data = zmq_msg_data(const_cast<zmq_msg_t*>(&msg));
+    *size = zmq_msg_size(const_cast<zmq_msg_t*>(&msg));
+  }
+
+  uint32_t message_size() const {
+    uint32_t total_size = 0;
+    for (const_iterator part = parts.begin(), last = parts.end(); part != last; ++part) {
+      total_size += zmq_msg_size(const_cast<zmq_msg_t*>(&(*part)));
     }
-    zmq_msg_t& msg = front();
-    *data = zmq_msg_data(&msg);
-    *size = zmq_msg_size(&msg);
-    pop_front();
+    return total_size;
+  }
+
+  void clear() {
+    for (const_iterator part = parts.begin(), last = parts.end(); part != last; ++part) {
+      zmq_msg_close(const_cast<zmq_msg_t*>(&(*part)));
+    }
+    parts.clear();
+  }
+
+  bool empty() const {
+    return parts.empty();
+  }
+
+  uint32_t size() const {
+    return parts.size();
+  }
+
+  const_iterator begin() const {
+    return parts.begin();
+  }
+
+  const_iterator end() const {
+    return parts.end();
+  }
+
+  const zmq_msg_t& at(uint32_t i) const {
+    return parts.at(i);
+  }
+
+  const zmq_msg_t& front() const {
+    return parts.front();
+  }
+
+  const zmq_msg_t& back() const {
+    return parts.back();
   }
 
   Message& operator << (uint8_t value) {
@@ -278,12 +319,11 @@ public:
   }
 
   Message& operator >> (uint8_t& value) {
-    zmq_msg_t msg;
-    pop(msg);
-    if (zmq_msg_size(&msg) != sizeof(uint8_t)) {
+    const zmq_msg_t& msg = pop();
+    if (zmq_msg_size(const_cast<zmq_msg_t*>(&msg)) != sizeof(uint8_t)) {
       throw std::runtime_error("message: type mismatch.");
     }
-    value = *reinterpret_cast<uint8_t*>(zmq_msg_data(&msg));
+    value = *reinterpret_cast<uint8_t*>(zmq_msg_data(const_cast<zmq_msg_t*>(&msg)));
     return *this;
   }
 
@@ -299,12 +339,11 @@ public:
   }
 
   Message& operator >> (uint16_t& value) {
-    zmq_msg_t msg;
-    pop(msg);
-    if (zmq_msg_size(&msg) != sizeof(uint16_t)) {
+    const zmq_msg_t& msg = pop();
+    if (zmq_msg_size(const_cast<zmq_msg_t*>(&msg)) != sizeof(uint16_t)) {
       throw std::runtime_error("message: type mismatch.");
     }
-    value = *reinterpret_cast<uint16_t*>(zmq_msg_data(&msg));
+    value = *reinterpret_cast<uint16_t*>(zmq_msg_data(const_cast<zmq_msg_t*>(&msg)));
     return *this;
   }
 
@@ -313,12 +352,11 @@ public:
   }
 
   Message& operator >> (uint32_t& value) {
-    zmq_msg_t msg;
-    pop(msg);
-    if (zmq_msg_size(&msg) != sizeof(uint32_t)) {
+    const zmq_msg_t& msg = pop();
+    if (zmq_msg_size(const_cast<zmq_msg_t*>(&msg)) != sizeof(uint32_t)) {
       throw std::runtime_error("message: type mismatch.");
     }
-    value = *reinterpret_cast<uint32_t*>(zmq_msg_data(&msg));
+    value = *reinterpret_cast<uint32_t*>(zmq_msg_data(const_cast<zmq_msg_t*>(&msg)));
     return *this;
   }
 
@@ -327,12 +365,11 @@ public:
   }
 
   Message& operator >> (uint64_t& value) {
-    zmq_msg_t msg;
-    pop(msg);
-    if (zmq_msg_size(&msg) != sizeof(uint64_t)) {
+    const zmq_msg_t& msg = pop();
+    if (zmq_msg_size(const_cast<zmq_msg_t*>(&msg)) != sizeof(uint64_t)) {
       throw std::runtime_error("message: type mismatch.");
     }
-    value = *reinterpret_cast<uint64_t*>(zmq_msg_data(&msg));
+    value = *reinterpret_cast<uint64_t*>(zmq_msg_data(const_cast<zmq_msg_t*>(&msg)));
     return *this;
   }
 
@@ -341,29 +378,68 @@ public:
   }
 
   Message& operator >> (std::string& value) {
-    zmq_msg_t msg;
-    pop(msg);
-    value.assign(reinterpret_cast<char*>(zmq_msg_data(&msg)), zmq_msg_size(&msg));
+    const zmq_msg_t& msg = pop();
+    value.assign(reinterpret_cast<char*>(zmq_msg_data(const_cast<zmq_msg_t*>(&msg))), zmq_msg_size(const_cast<zmq_msg_t*>(&msg)));
     return *this;
   }
 
   template <typename Type>
   Message& operator >> (Type& value) {
-    zmq_msg_t msg;
-    pop(msg);
-    std::istringstream stream(std::string(reinterpret_cast<char*>(zmq_msg_data(&msg)), zmq_msg_size(&msg)));
+    const zmq_msg_t& msg = pop();
+    std::istringstream stream(std::string(reinterpret_cast<char*>(zmq_msg_data(const_cast<zmq_msg_t*>(&msg))), zmq_msg_size(const_cast<zmq_msg_t*>(&msg))));
     stream >> value;
     return *this;
   }
+
+  static std::string to_string(const zmq_msg_t& msg) {
+    return std::string(reinterpret_cast<char*>(zmq_msg_data(const_cast<zmq_msg_t*>(&msg))), zmq_msg_size(const_cast<zmq_msg_t*>(&msg)));
+  }
+
+private:
+  Parts parts;
+  const_iterator current;
+};
+
+
+class Context {
+public:
+  Context(uint32_t threads = 1, bool auto_term = true) {
+    init(threads, auto_term);
+  }
+
+  ~Context() {
+    if (auto_term) {
+      term();
+    }
+  }
+
+  void init(uint32_t threads = 1, bool auto_term = true) {
+    int32_t major, minor, patch;
+    zmq_version(&major, &minor, &patch);
+    if (major != ZMQ_VERSION_MAJOR) {
+      throw std::runtime_error("zmq: library mismatch.");
+    }
+    this->auto_term = auto_term;
+    context = zmq_init(threads);
+  }
+
+  void term() {
+    zmq_term(context);
+    context = 0;
+  }
+
+private:
+  Context& operator = (const Context&); // non copyable
+
+  void* context;
+  bool auto_term;
+
+  friend class Socket;
 };
 
 
 class Socket {
 private:
-  Socket(void* ctx, SocketType type) {
-    socket = zmq_socket(ctx, type);
-  }
-
   bool send(const zmq_msg_t& msg, bool block = true, bool more = false) const {
     uint32_t flags = 0;
     if (!block) {
@@ -419,13 +495,26 @@ private:
   }
 
 public:
+  Socket(void* socket = 0) : socket(socket) {
+  }
+
+  Socket(const Context& ctx, SocketType type) : socket(zmq_socket(ctx.context, type)) {
+  }
+
   ~Socket() {
     close();
   }
 
+  bool open(const Context& ctx, SocketType type) {
+    socket = zmq_socket(ctx.context, type);
+    return socket != 0;
+  }
+
   void close() {
-    zmq_close(socket);
-    socket = 0;
+    if (socket != 0) {
+      zmq_close(socket);
+      socket = 0;
+    }
   }
 
   std::string last_error() const {
@@ -495,8 +584,8 @@ public:
     if (msg.empty()) {
       return true;
     }
-    for (Message::const_iterator frame = msg.begin(), last = msg.end() - 1; frame != last; ++frame) {
-      if (!send(*frame, block, true)) {
+    for (Message::const_iterator part = msg.begin(), last = msg.end() - 1; part != last; ++part) {
+      if (!send(*part, block, true)) {
         return false;
       }
     }
@@ -510,17 +599,19 @@ public:
     #else
     for (int64_t more = 1; more != 0; getsockopt(rcvmore, more)) {
     #endif
-      zmq_msg_t frame;
-      zmq_msg_init(&frame);
-      if (!recv(frame, block)) {
+      zmq_msg_t part;
+      zmq_msg_init(&part);
+      if (!recv(part, block)) {
         return false;
       }
-      msg.push(frame);
+      msg.push(part);
     }
     return true;
   }
 
 private:
+  Socket& operator = (const Socket&); // non copyable
+
   void* socket;
 
   #if (ZMQ_VERSION_MAJOR >= 3)
@@ -531,7 +622,6 @@ private:
   static const uint32_t SNDMORE = ZMQ_SNDMORE;
   #endif
 
-  friend class Context;
   friend class Poller;
 };
 
@@ -578,38 +668,6 @@ private:
   PollItems items;
 };
 
-
-class Context {
-public:
-  Context(bool auto_term = true, uint32_t threads = 1) {
-    int32_t major, minor, patch;
-    zmq_version(&major, &minor, &patch);
-    if (major != ZMQ_VERSION_MAJOR) {
-      throw std::runtime_error("zmq: library mismatch.");
-    }
-    this->auto_term = auto_term;
-    context = zmq_init(threads);
-  }
-
-  ~Context() {
-    if (auto_term) {
-      term();
-    }
-  }
-
-  void term() {
-    zmq_term(context);
-    context = 0;
-  }
-
-  Socket socket(SocketType type) const {
-    return Socket(context, type);
-  }
-
-private:
-  void* context;
-  bool auto_term;
-};
 
 } // zmqcpp
 

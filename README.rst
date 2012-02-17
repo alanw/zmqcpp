@@ -1,7 +1,7 @@
 ZMQ C++ wrapper (with no added magic)
 =====================================
 
-Welcome to the super-thin C++ wrapper for zmq version **1.0.1**.
+Welcome to the super-thin C++ wrapper for zmq version **1.0.2**.
 
 
 Features
@@ -28,7 +28,7 @@ To connect to another zmq socket and send a message::
     socket.connect("tcp://127.0.0.1:4050");
 
     Message msg;
-    msg << "first frame" << 123 << "third frame";
+    msg << "first part" << 123 << "third part";
 
     if (!socket.send(msg))
       std::cout << "Send error:" << socket.last_error() << "\n";

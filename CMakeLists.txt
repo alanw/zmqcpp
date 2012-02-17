@@ -5,7 +5,7 @@ cmake_minimum_required (VERSION 2.8.3)
 project (zmqcpp)
 set (zmqcpp_VERSION_MAJOR 1)
 set (zmqcpp_VERSION_MINOR 0)
-set (zmqcpp_VERSION_PATCH 1)
+set (zmqcpp_VERSION_PATCH 2)
 set (zmqcpp_VERSION "${zmqcpp_VERSION_MAJOR}.${zmqcpp_VERSION_MINOR}.${zmqcpp_VERSION_PATCH}")
 
 
