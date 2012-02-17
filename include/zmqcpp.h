@@ -16,7 +16,7 @@
 //   using namespace zmqcpp
 //
 //   Context ctx;
-//   Socket socket = ctx.socket(xreq);
+//   Socket socket(ctx, xreq);
 //   socket.setsockopt(linger, 0);
 //   socket.connect("tcp://127.0.0.1:4050");
 //
@@ -33,7 +33,7 @@
 //   using namespace zmqcpp
 //
 //   Context ctx;
-//   Socket socket = ctx.socket(xrep);
+//   Socket socket(ctx, xrep);
 //   socket.bind("tpc://*:4050");
 //
 //   Message msg;
@@ -58,7 +58,7 @@
 //   using namespace zmqcpp
 //
 //   Context ctx;
-//   Socket socket = ctx.socket(xrep);
+//   Socket socket(ctx, xrep);
 //   socket.bind("tpc://*:4050");
 //
 //   Poller poller;
