@@ -1,7 +1,7 @@
 ZMQ C++ wrapper (with no added magic)
 =====================================
 
-Welcome to the super-thin C++ wrapper for zmq version **1.0.2**.
+Welcome to the super-thin C++ wrapper for zmq version **1.1.0**.
 
 
 Features
@@ -20,7 +20,7 @@ To connect to another zmq socket and send a message::
 
     #include "zmqcpp.h"
 
-    using namespace zmqcpp
+    using namespace zmqcpp;
 
     Context ctx;
     Socket socket(ctx, xreq);
@@ -37,7 +37,7 @@ To bind a zmq socket and receive a message::
 
     #include "zmqcpp.h"
 
-    using namespace zmqcpp
+    using namespace zmqcpp;
 
     Context ctx;
     Socket socket(ctx, xrep);
@@ -62,7 +62,7 @@ To poll a zmq socket::
 
     #include "zmqcpp.h"
 
-    using namespace zmqcpp
+    using namespace zmqcpp;
 
     Context ctx;
     Socket socket(ctx, xrep);
@@ -80,6 +80,33 @@ To poll a zmq socket::
         // do something with msg here
       }
     }
+
+To receive a callback when a zmq socket is polled::
+
+    #include "zmqcpp.h"
+
+    using namespace zmqcpp;
+
+    void socket_callback(const Socket& socket) {
+      Message msg;
+      socket.recv(msg);
+      // doc something with msg here
+    }
+
+    ...
+
+    Context ctx;
+    Socket socket(ctx, xrep);
+    socket.bind("tpc://*:4050");
+
+    Poller poller;
+    poller.add(socket, pollin, socket_callback);
+
+    while (true) {
+      poller.poll(1000); // 1 second timeout
+      // callback function called here if polled
+    }
+
 
 For more examples, including copying messages and constructing messages from
 custom data types, then check out the unit tests.

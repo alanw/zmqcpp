@@ -175,6 +175,7 @@ TEST_F(zmqcpp_fixture, test_serialize_and_deserialize_custom_type) {
   ASSERT_EQ(output_custom.first, 123);
   ASSERT_EQ(output_custom.second, "custom type");
 }
+
 }
 
 TEST_F(zmqcpp_fixture, test_deserialize_invalid) {
@@ -488,4 +489,45 @@ TEST_F(zmqcpp_fixture, test_poller_remove_socket) {
   bind_sock1.recv(recv_msg1, false);
 
   assert_equal(validate_msg1, recv_msg1);
+}
+
+namespace {
+
+bool callback_called = false;
+
+void test_poll_callback(const Socket& socket) {
+  callback_called = true;
+
+  Message recv_msg;
+  socket.recv(recv_msg, false);
+
+  std::string output;
+  recv_msg >> output;
+
+  ASSERT_EQ(output, "hello world");
+}
+
+TEST_F(zmqcpp_fixture, test_poller_callback) {
+  Context ctx;
+
+  Socket bind_sock(ctx, rep);
+  ASSERT_TRUE(bind_sock.bind("tcp://*:4050"));
+
+  Socket connect_sock(ctx, req);
+  ASSERT_TRUE(connect_sock.connect("tcp://localhost:4050"));
+
+  Message send_msg;
+  send_msg << "hello world";
+
+  Message validate_msg(send_msg.begin(), send_msg.end());
+  ASSERT_TRUE(connect_sock.send(send_msg));
+
+  Poller test_poller;
+  test_poller.add(bind_sock, pollin, test_poll_callback);
+
+  ASSERT_TRUE(test_poller.poll());
+  ASSERT_TRUE(test_poller.has_polled(bind_sock));
+  ASSERT_TRUE(callback_called);
+}
+
 }

@@ -13,7 +13,7 @@
 //
 //   #include "zmqcpp.h"
 //
-//   using namespace zmqcpp
+//   using namespace zmqcpp;
 //
 //   Context ctx;
 //   Socket socket(ctx, xreq);
@@ -30,7 +30,7 @@
 //
 //   #include "zmqcpp.h"
 //
-//   using namespace zmqcpp
+//   using namespace zmqcpp;
 //
 //   Context ctx;
 //   Socket socket(ctx, xrep);
@@ -55,7 +55,7 @@
 //
 //   #include "zmqcpp.h"
 //
-//   using namespace zmqcpp
+//   using namespace zmqcpp;
 //
 //   Context ctx;
 //   Socket socket(ctx, xrep);
@@ -74,6 +74,32 @@
 //     }
 //   }
 //
+// To receive a callback when a zmq socket is polled:
+//
+//   #include "zmqcpp.h"
+//
+//   using namespace zmqcpp;
+//
+//   void socket_callback(const Socket& socket) {
+//     Message msg;
+//     socket.recv(msg);
+//     // doc something with msg here
+//   }
+//
+//   ...
+//
+//   Context ctx;
+//   Socket socket(ctx, xrep);
+//   socket.bind("tpc://*:4050");
+//
+//   Poller poller;
+//   poller.add(socket, pollin, socket_callback);
+//
+//   while (true) {
+//     poller.poll(1000); // 1 second timeout
+//     // callback function called here if polled
+//   }
+//
 // For more examples, including copying messages and constructing messages from
 // custom data types, then check out the unit tests.
 //
@@ -87,6 +113,7 @@
 #include <string>
 #include <vector>
 #include <deque>
+#include <map>
 #include <algorithm>
 #include <stdexcept>
 #include <stdint.h>
@@ -495,10 +522,11 @@ private:
   }
 
 public:
-  Socket(void* socket = 0) : socket(socket) {
+  Socket(void* socket = 0) : socket(socket), own_socket(false) {
   }
 
-  Socket(const Context& ctx, SocketType type) : socket(zmq_socket(ctx.context, type)) {
+  Socket(const Context& ctx, SocketType type) {
+    open(ctx, type);
   }
 
   ~Socket() {
@@ -506,12 +534,13 @@ public:
   }
 
   bool open(const Context& ctx, SocketType type) {
+    own_socket = true;
     socket = zmq_socket(ctx.context, type);
     return socket != 0;
   }
 
   void close() {
-    if (socket != 0) {
+    if (own_socket && socket != 0) {
       zmq_close(socket);
       socket = 0;
     }
@@ -613,6 +642,7 @@ private:
   Socket& operator = (const Socket&); // non copyable
 
   void* socket;
+  bool own_socket;
 
   #if (ZMQ_VERSION_MAJOR >= 3)
   static const uint32_t DONTWAIT = ZMQ_DONTWAIT;
@@ -628,7 +658,12 @@ private:
 
 class Poller {
 public:
-  void add(const Socket& socket, PollOption option) {
+  typedef void (*poll_callback)(const Socket&);
+
+  void add(const Socket& socket, PollOption option, poll_callback callback = 0) {
+    if (callback) {
+      callbacks.insert(std::make_pair(socket.socket, callback));
+    }
     zmq_pollitem_t item = {socket.socket, 0, option, 0};
     items.insert(std::upper_bound(items.begin(), items.end(), item, less_than_socket()), item);
   }
@@ -639,14 +674,26 @@ public:
     if (poll_item == items.end() || socket.socket < poll_item->socket)
       return;
     items.erase(poll_item);
+    callbacks.erase(socket.socket);
   }
 
   bool poll() {
-    return zmq_poll(items.data(), items.size(), -1) > 0;
+    bool poll_socket = zmq_poll(items.data(), items.size(), -1) > 0;
+    return poll_socket ? dispatch() : false;
   }
 
   bool poll(uint32_t timeout) {
-    return zmq_poll(items.data(), items.size(), timeout) > 0;
+    bool poll_socket = zmq_poll(items.data(), items.size(), timeout) > 0;
+    return poll_socket ? dispatch() : false;
+  }
+
+  bool dispatch() {
+    for (CallbackItems::const_iterator socket = callbacks.begin(), last = callbacks.end(); socket != last; ++socket) {
+      if (has_polled(socket->first) && socket->second) {
+        socket->second(Socket(socket->first));
+      }
+    }
+    return true;
   }
 
   bool has_polled(const Socket& socket) const {
@@ -659,13 +706,17 @@ public:
   }
 
 private:
+  typedef std::map<void*, poll_callback> CallbackItems;
+  typedef std::vector<zmq_pollitem_t> PollItems;
+
+  PollItems items;
+  CallbackItems callbacks;
+
   struct less_than_socket {
     inline bool operator() (const zmq_pollitem_t& item1, const zmq_pollitem_t& item2) {
       return (item1.socket < item2.socket);
     }
   };
-  typedef std::vector<zmq_pollitem_t> PollItems;
-  PollItems items;
 };
 
 
