@@ -11,7 +11,10 @@ set (zmqcpp_VERSION "${zmqcpp_VERSION_MAJOR}.${zmqcpp_VERSION_MINOR}.${zmqcpp_VE
 
 ## Configuration
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -Wall -O2 -Wno-long-long -pedantic")
+if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Release")
+endif()
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -Wall -Wno-long-long -pedantic")
 
 
 include_directories(

@@ -177,7 +177,18 @@ enum PollOption {
 class Message {
 public:
   typedef std::deque<zmq_msg_t> Parts;
+  typedef Parts::iterator iterator;
   typedef Parts::const_iterator const_iterator;
+
+  struct MessageBuffer
+  {
+    MessageBuffer(void* data = 0, uint32_t size = 0) : data(data), size(size) {}
+    bool empty() const {
+      return data == 0 && size == 0;
+    }
+    void* data;
+    uint32_t size;
+  };
 
   Message() : current(parts.begin()) {
     // default
@@ -187,38 +198,45 @@ public:
     push(msg);
   }
 
-  Message(const void* data, uint32_t size, zmq_free_fn* free_fn = 0) {
-    push(data, size, free_fn);
+  Message(const void* data, uint32_t size) {
+    push(data, size);
   }
 
   template <typename Iter>
-  Message(Iter first, Iter last, bool copy = true) {
-    for (; first != last; ++first) {
-      if (!copy) {
-        push(*first);
-      }
-      else {
-        zmq_msg_t copy_part;
-        zmq_msg_init(&copy_part);
-        zmq_msg_copy(&copy_part, const_cast<zmq_msg_t*>(&(*first)));
-        push(copy_part);
-      }
-    }
+  Message(Iter first, Iter last) {
+    assign(first, last);
+  }
+
+  Message(const Message& msg) {
+    assign(msg);
   }
 
   ~Message() {
     clear();
   }
 
-  void push(const zmq_msg_t& msg) {
-    parts.push_back(msg);
+  void push(const zmq_msg_t& msg, bool copy = false) {
+    if (!copy) {
+      parts.push_back(msg);
+    }
+    else {
+      zmq_msg_t copy_msg;
+      zmq_msg_init(&copy_msg);
+      zmq_msg_copy(&copy_msg, const_cast<zmq_msg_t*>(&msg));
+      parts.push_back(copy_msg);
+    }
     current = parts.begin();
   }
 
-  void push(const void* data, size_t size, zmq_free_fn* free_fn = 0) {
+  void push(const void* data, size_t size) {
     zmq_msg_t msg;
     zmq_msg_init_size(&msg, size);
-    std::memcpy(reinterpret_cast<char*>(zmq_msg_data(&msg)), data, size);
+    if (data) {
+      std::memcpy(message_buffer(msg).data, data, size);
+    }
+    else {
+      std::memset(message_buffer(msg).data, 0, size);
+    }
     push(msg);
   }
 
@@ -229,16 +247,14 @@ public:
     return *current++;
   }
 
-  void pop(void** data, size_t* size) {
-    const zmq_msg_t& msg = pop();
-    *data = zmq_msg_data(const_cast<zmq_msg_t*>(&msg));
-    *size = zmq_msg_size(const_cast<zmq_msg_t*>(&msg));
+  MessageBuffer pop_buffer() {
+    return message_buffer(pop());
   }
 
-  uint32_t message_size() const {
+  uint32_t message_bytes() const {
     uint32_t total_size = 0;
     for (const_iterator part = parts.begin(), last = parts.end(); part != last; ++part) {
-      total_size += zmq_msg_size(const_cast<zmq_msg_t*>(&(*part)));
+      total_size += message_buffer(*part).size;
     }
     return total_size;
   }
@@ -266,6 +282,14 @@ public:
     return parts.end();
   }
 
+  iterator begin() {
+    return parts.begin();
+  }
+
+  iterator end() {
+    return parts.end();
+  }
+
   const zmq_msg_t& at(uint32_t i) const {
     return parts.at(i);
   }
@@ -278,10 +302,55 @@ public:
     return parts.back();
   }
 
+  void assign(const Message& msg, bool copy = true) {
+    clear();
+    assign(msg.begin(), msg.end());
+  }
+
+  template <typename Iter>
+  void assign(Iter first, Iter last, bool copy = true) {
+    clear();
+    for (; first != last; ++first) {
+      push(*first, copy);
+    }
+  }
+
+  void assign(const zmq_msg_t& msg, bool copy = true) {
+    clear();
+    push(msg, copy);
+  }
+
+  template <typename Iter>
+  iterator insert(iterator position, Iter first, Iter last, bool copy = true) {
+    for (; first != last; ++first) {
+      position = insert(position, *first, copy) + 1;
+    }
+    return position;
+  }
+
+  iterator insert(iterator position, const zmq_msg_t& msg, bool copy = true) {
+    if (!copy) {
+      position = parts.insert(position, msg);
+    }
+    else {
+      zmq_msg_t copy_msg;
+      zmq_msg_init(&copy_msg);
+      zmq_msg_copy(&copy_msg, const_cast<zmq_msg_t*>(&msg));
+      position = parts.insert(position, copy_msg);
+    }
+    current = parts.begin();
+    return position;
+  }
+
+  Message& operator = (const Message& msg) {
+    assign(msg.begin(), msg.end());
+    return *this;
+  }
+
   Message& operator << (uint8_t value) {
     zmq_msg_t msg;
     zmq_msg_init_size(&msg, sizeof(uint8_t));
-    *reinterpret_cast<uint8_t*>(zmq_msg_data(&msg)) = value;
+    *reinterpret_cast<uint8_t*>(message_buffer(msg).data) = value;
     push(msg);
     return *this;
   }
@@ -297,7 +366,7 @@ public:
   Message& operator << (uint16_t value) {
     zmq_msg_t msg;
     zmq_msg_init_size(&msg, sizeof(uint16_t));
-    *reinterpret_cast<uint16_t*>(zmq_msg_data(&msg)) = value;
+    *reinterpret_cast<uint16_t*>(message_buffer(msg).data) = value;
     push(msg);
     return *this;
   }
@@ -309,7 +378,7 @@ public:
   Message& operator << (uint32_t value) {
     zmq_msg_t msg;
     zmq_msg_init_size(&msg, sizeof(uint32_t));
-    *reinterpret_cast<uint32_t*>(zmq_msg_data(&msg)) = value;
+    *reinterpret_cast<uint32_t*>(message_buffer(msg).data) = value;
     push(msg);
     return *this;
   }
@@ -321,7 +390,7 @@ public:
   Message& operator << (uint64_t value) {
     zmq_msg_t msg;
     zmq_msg_init_size(&msg, sizeof(uint64_t));
-    *reinterpret_cast<uint64_t*>(zmq_msg_data(&msg)) = value;
+    *reinterpret_cast<uint64_t*>(message_buffer(msg).data) = value;
     push(msg);
     return *this;
   }
@@ -333,7 +402,7 @@ public:
   Message& operator << (const std::string& value) {
     zmq_msg_t msg;
     zmq_msg_init_size(&msg, value.length());
-    std::copy(value.begin(), value.end(), reinterpret_cast<char*>(zmq_msg_data(&msg)));
+    std::copy(value.begin(), value.end(), reinterpret_cast<char*>(message_buffer(msg).data));
     push(msg);
     return *this;
   }
@@ -346,11 +415,11 @@ public:
   }
 
   Message& operator >> (uint8_t& value) {
-    const zmq_msg_t& msg = pop();
-    if (zmq_msg_size(const_cast<zmq_msg_t*>(&msg)) != sizeof(uint8_t)) {
+    MessageBuffer buffer(pop_buffer());
+    if (buffer.size != sizeof(uint8_t)) {
       throw std::runtime_error("message: type mismatch.");
     }
-    value = *reinterpret_cast<uint8_t*>(zmq_msg_data(const_cast<zmq_msg_t*>(&msg)));
+    value = *reinterpret_cast<uint8_t*>(buffer.data);
     return *this;
   }
 
@@ -366,11 +435,11 @@ public:
   }
 
   Message& operator >> (uint16_t& value) {
-    const zmq_msg_t& msg = pop();
-    if (zmq_msg_size(const_cast<zmq_msg_t*>(&msg)) != sizeof(uint16_t)) {
+    MessageBuffer buffer(pop_buffer());
+    if (buffer.size != sizeof(uint16_t)) {
       throw std::runtime_error("message: type mismatch.");
     }
-    value = *reinterpret_cast<uint16_t*>(zmq_msg_data(const_cast<zmq_msg_t*>(&msg)));
+    value = *reinterpret_cast<uint16_t*>(buffer.data);
     return *this;
   }
 
@@ -379,11 +448,11 @@ public:
   }
 
   Message& operator >> (uint32_t& value) {
-    const zmq_msg_t& msg = pop();
-    if (zmq_msg_size(const_cast<zmq_msg_t*>(&msg)) != sizeof(uint32_t)) {
+    MessageBuffer buffer(pop_buffer());
+    if (buffer.size != sizeof(uint32_t)) {
       throw std::runtime_error("message: type mismatch.");
     }
-    value = *reinterpret_cast<uint32_t*>(zmq_msg_data(const_cast<zmq_msg_t*>(&msg)));
+    value = *reinterpret_cast<uint32_t*>(buffer.data);
     return *this;
   }
 
@@ -392,11 +461,11 @@ public:
   }
 
   Message& operator >> (uint64_t& value) {
-    const zmq_msg_t& msg = pop();
-    if (zmq_msg_size(const_cast<zmq_msg_t*>(&msg)) != sizeof(uint64_t)) {
+    MessageBuffer buffer(pop_buffer());
+    if (buffer.size != sizeof(uint64_t)) {
       throw std::runtime_error("message: type mismatch.");
     }
-    value = *reinterpret_cast<uint64_t*>(zmq_msg_data(const_cast<zmq_msg_t*>(&msg)));
+    value = *reinterpret_cast<uint64_t*>(buffer.data);
     return *this;
   }
 
@@ -405,21 +474,30 @@ public:
   }
 
   Message& operator >> (std::string& value) {
-    const zmq_msg_t& msg = pop();
-    value.assign(reinterpret_cast<char*>(zmq_msg_data(const_cast<zmq_msg_t*>(&msg))), zmq_msg_size(const_cast<zmq_msg_t*>(&msg)));
+    MessageBuffer buffer(pop_buffer());
+    value.assign(reinterpret_cast<char*>(buffer.data), buffer.size);
     return *this;
   }
 
   template <typename Type>
   Message& operator >> (Type& value) {
-    const zmq_msg_t& msg = pop();
-    std::istringstream stream(std::string(reinterpret_cast<char*>(zmq_msg_data(const_cast<zmq_msg_t*>(&msg))), zmq_msg_size(const_cast<zmq_msg_t*>(&msg))));
+    MessageBuffer buffer(pop_buffer());
+    std::istringstream stream(std::string(reinterpret_cast<char*>(buffer.data), buffer.size));
     stream >> value;
     return *this;
   }
 
-  static std::string to_string(const zmq_msg_t& msg) {
-    return std::string(reinterpret_cast<char*>(zmq_msg_data(const_cast<zmq_msg_t*>(&msg))), zmq_msg_size(const_cast<zmq_msg_t*>(&msg)));
+  static std::string message_string(const zmq_msg_t& msg) {
+    MessageBuffer buffer(message_buffer(msg));
+    return std::string(reinterpret_cast<char*>(buffer.data), buffer.size);
+  }
+
+  static MessageBuffer message_buffer(const zmq_msg_t& msg) {
+    return MessageBuffer(zmq_msg_data(const_cast<zmq_msg_t*>(&msg)), zmq_msg_size(const_cast<zmq_msg_t*>(&msg)));
+  }
+
+  static bool message_empty(const zmq_msg_t& msg) {
+    return zmq_msg_size(const_cast<zmq_msg_t*>(&msg)) == 0;
   }
 
 private:
@@ -658,13 +736,13 @@ private:
 
 class Poller {
 public:
-  typedef void (*poll_callback)(const Socket&);
+  typedef void (*poll_callback)(const void*, const Socket&);
 
-  void add(const Socket& socket, PollOption option, poll_callback callback = 0) {
+  void add(const Socket& socket, PollOption option, poll_callback callback = 0, const void* param = 0) {
     if (callback) {
-      callbacks.insert(std::make_pair(socket.socket, callback));
+      callbacks.insert(std::make_pair(socket.socket, std::make_pair(callback, param)));
     }
-    zmq_pollitem_t item = {socket.socket, 0, option, 0};
+    zmq_pollitem_t item = {socket.socket, 0, (short)option, 0};
     items.insert(std::upper_bound(items.begin(), items.end(), item, less_than_socket()), item);
   }
 
@@ -689,8 +767,8 @@ public:
 
   bool dispatch() {
     for (CallbackItems::const_iterator socket = callbacks.begin(), last = callbacks.end(); socket != last; ++socket) {
-      if (has_polled(socket->first) && socket->second) {
-        socket->second(Socket(socket->first));
+      if (has_polled(socket->first) && socket->second.first) {
+        socket->second.first(socket->second.second, Socket(socket->first));
       }
     }
     return true;
@@ -706,7 +784,8 @@ public:
   }
 
 private:
-  typedef std::map<void*, poll_callback> CallbackItems;
+  typedef std::pair<poll_callback, const void*> CallbackParam;
+  typedef std::map<void*, CallbackParam> CallbackItems;
   typedef std::vector<zmq_pollitem_t> PollItems;
 
   PollItems items;

@@ -17,11 +17,13 @@ protected:
   void assert_equal(const Message& msg1, const Message& msg2, bool same = false) {
     ASSERT_EQ(msg1.size(), msg2.size());
     for (uint32_t part = 0, last = msg1.size() - 1; part != last; ++part) {
-      ASSERT_EQ(zmq_msg_size(const_cast<zmq_msg_t*>(&msg1.at(part))), zmq_msg_size(const_cast<zmq_msg_t*>(&msg2.at(part))));
+      Message::MessageBuffer buffer1(Message::message_buffer(msg1.at(part)));
+      Message::MessageBuffer buffer2(Message::message_buffer(msg2.at(part)));
+      ASSERT_EQ(buffer1.size, buffer2.size);
       if (!same) {
-        ASSERT_NE(zmq_msg_data(const_cast<zmq_msg_t*>(&msg1.at(part))), zmq_msg_data(const_cast<zmq_msg_t*>(&msg2.at(part))));
+        ASSERT_NE(buffer1.data, buffer2.data);
       }
-      ASSERT_TRUE(memcmp(zmq_msg_data(const_cast<zmq_msg_t*>(&msg1.at(part))), zmq_msg_data(const_cast<zmq_msg_t*>(&msg2.at(part))), zmq_msg_size(const_cast<zmq_msg_t*>(&msg1.at(part)))) == 0);
+      ASSERT_TRUE(memcmp(buffer1.data, buffer2.data, buffer1.size) == 0);
     }
   }
 };
@@ -37,13 +39,29 @@ TEST_F(zmqcpp_fixture, test_message_buffer) {
   assert_equal(first_msg, second_msg);
 }
 
-TEST_F(zmqcpp_fixture, test_message_to_string) {
+TEST_F(zmqcpp_fixture, test_message_message_string) {
   const char buffer[] = "this is a test message";
 
   Message input_msg(buffer, sizeof(buffer));
-  std::string test_output = Message::to_string(input_msg.front());
+  std::string test_output = Message::message_string(input_msg.front());
 
   ASSERT_STREQ(test_output.c_str(), "this is a test message");
+}
+
+TEST_F(zmqcpp_fixture, test_message_message_size) {
+  Message input_msg;
+  input_msg << "this is a test message";
+  ASSERT_EQ(Message::message_buffer(input_msg.front()).size, 22);
+}
+
+TEST_F(zmqcpp_fixture, test_message_message_empty) {
+  Message first_msg;
+  first_msg << "hello world";
+
+  Message second_msg((void*)0, 0);
+
+  ASSERT_FALSE(Message::message_empty(first_msg.front()));
+  ASSERT_TRUE(Message::message_empty(second_msg.front()));
 }
 
 TEST_F(zmqcpp_fixture, test_serialize_single_part) {
@@ -66,11 +84,11 @@ TEST_F(zmqcpp_fixture, test_serialize_multiple_parts) {
   assert_equal(first_msg, second_msg);
 }
 
-TEST_F(zmqcpp_fixture, test_message_size) {
+TEST_F(zmqcpp_fixture, test_message_bytes) {
   Message test_msg;
   test_msg << "hello world" << "this is a test";
 
-  ASSERT_EQ(test_msg.message_size(), 25);
+  ASSERT_EQ(test_msg.message_bytes(), 25);
 }
 
 TEST_F(zmqcpp_fixture, test_deserialize_single_part) {
@@ -198,13 +216,107 @@ TEST_F(zmqcpp_fixture, test_copy_message) {
   assert_equal(test_msg, copy_msg);
 }
 
-TEST_F(zmqcpp_fixture, test_copy_ref_message) {
-  Message test_msg;
-  test_msg << "hello world" << (uint8_t)123 << true;
+TEST_F(zmqcpp_fixture, test_message_assign_single) {
+  Message first_msg;
+  first_msg << "hello world";
 
-  Message copy_msg(test_msg.begin(), test_msg.end(), false);
+  Message second_msg;
+  second_msg.assign(first_msg.front(), false);
 
-  assert_equal(test_msg, copy_msg, true);
+  assert_equal(first_msg, second_msg, true);
+}
+
+TEST_F(zmqcpp_fixture, test_message_assign_single_copy) {
+  Message first_msg;
+  first_msg << "hello world";
+
+  Message second_msg;
+  second_msg.assign(first_msg.front(), true);
+
+  assert_equal(first_msg, second_msg);
+}
+
+TEST_F(zmqcpp_fixture, test_message_assign_range) {
+  Message first_msg;
+  first_msg << "hello world" << (uint8_t)123 << true;
+
+  Message second_msg;
+  second_msg.assign(first_msg.begin(), first_msg.end(), false);
+
+  assert_equal(first_msg, second_msg, true);
+}
+
+TEST_F(zmqcpp_fixture, test_message_assign_range_copy) {
+  Message first_msg;
+  first_msg << "hello world" << (uint8_t)123 << true;
+
+  Message second_msg;
+  second_msg.assign(first_msg.begin(), first_msg.end(), true);
+
+  assert_equal(first_msg, second_msg);
+}
+
+TEST_F(zmqcpp_fixture, test_message_insert_single_first) {
+  Message first_msg;
+  first_msg << "hello world";
+
+  Message second_msg;
+  second_msg << "insert test";
+
+  first_msg.insert(first_msg.begin(), second_msg.front(), false);
+
+  std::string part1;
+  std::string part2;
+
+  ASSERT_EQ(first_msg.size(), 2);
+  first_msg >> part1 >> part2;
+
+  ASSERT_EQ(part1, "insert test");
+  ASSERT_EQ(part2, "hello world");
+}
+
+TEST_F(zmqcpp_fixture, test_message_insert_single_last) {
+  Message first_msg;
+  first_msg << "hello world";
+
+  Message second_msg;
+  second_msg << "insert test";
+
+  first_msg.insert(first_msg.end(), second_msg.front(), false);
+
+  std::string part1;
+  std::string part2;
+
+  ASSERT_EQ(first_msg.size(), 2);
+  first_msg >> part1 >> part2;
+
+  ASSERT_EQ(part1, "hello world");
+  ASSERT_EQ(part2, "insert test");
+}
+
+TEST_F(zmqcpp_fixture, test_message_insert_range) {
+  Message first_msg;
+  first_msg << "hello world";
+  first_msg << "second part";
+
+  Message second_msg;
+  second_msg << "insert test 1";
+  second_msg << "insert test 2";
+
+  first_msg.insert(first_msg.begin() + 1, second_msg.begin(), second_msg.end(), false);
+
+  std::string part1;
+  std::string part2;
+  std::string part3;
+  std::string part4;
+
+  ASSERT_EQ(first_msg.size(), 4);
+  first_msg >> part1 >> part2 >> part3 >> part4;
+
+  ASSERT_EQ(part1, "hello world");
+  ASSERT_EQ(part2, "insert test 1");
+  ASSERT_EQ(part3, "insert test 2");
+  ASSERT_EQ(part4, "second part");
 }
 
 TEST_F(zmqcpp_fixture, test_socket_single_part) {
@@ -495,7 +607,7 @@ namespace {
 
 bool callback_called = false;
 
-void test_poll_callback(const Socket& socket) {
+void test_poll_callback(const void* param, const Socket& socket) {
   callback_called = true;
 
   Message recv_msg;
