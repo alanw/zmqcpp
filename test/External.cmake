@@ -52,3 +52,4 @@ SET(GMOCK_DIR ${source_dir})
 SET(GMOCK_INCLUDE_DIR ${source_dir}/include)
 ExternalProject_Get_Property(googlemock binary_dir)
 SET(GMOCK_LIB_DIR "${binary_dir}")
+
