@@ -154,7 +154,7 @@ enum SocketOption {
   multicast_hops = ZMQ_MULTICAST_HOPS,
   rcvtimeo = ZMQ_RCVTIMEO,
   sndtimeo = ZMQ_SNDTIMEO,
-  ipv4only = ZMQ_IPV4ONLY,
+  ipv6 = ZMQ_IPV6,
   #else
   hwm = ZMQ_HWM,
   swap = ZMQ_SWAP,
@@ -176,7 +176,12 @@ enum SocketOption {
   backlog = ZMQ_BACKLOG,
   recovery_ivl = ZMQ_RECOVERY_IVL,
   reconnect_ivl = ZMQ_RECONNECT_IVL,
-  reconnect_ivl_max = ZMQ_RECONNECT_IVL_MAX
+  reconnect_ivl_max = ZMQ_RECONNECT_IVL_MAX,
+  immediate = ZMQ_IMMEDIATE,
+  probe_router = ZMQ_PROBE_ROUTER,
+  req_correlate = ZMQ_REQ_CORRELATE,
+  req_relaxed = ZMQ_REQ_RELAXED,
+  conflate = ZMQ_CONFLATE,
 };
 
 enum PollOption {
@@ -587,8 +592,11 @@ private:
            option == linger || option == reconnect_ivl ||
            option == reconnect_ivl_max || option == backlog ||
            option == multicast_hops || option == rcvtimeo ||
-           option == sndtimeo || option == ipv4only || option == type ||
-           option == rcvmore || option == fd || option == events;
+           option == sndtimeo || option == ipv6 || option == type ||
+           option == rcvmore || option == fd || option == events ||
+           option == immediate || option == probe_router ||
+           option == req_correlate || option == req_relaxed ||
+           option == conflate;
     #else
     return option == linger || option == reconnect_ivl ||
            option == reconnect_ivl_max || option == backlog ||
