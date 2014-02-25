@@ -365,10 +365,10 @@ TEST_F(zmqcpp_fixture, test_socket_setsockopt_int32) {
   Context ctx;
 
   Socket test_sock(ctx, push);
-  test_sock.setsockopt(linger, 123);
+  test_sock.setsockopt(zmqcpp::linger, 123);
 
   int32_t test_linger = 0;
-  test_sock.getsockopt(linger, test_linger);
+  test_sock.getsockopt(zmqcpp::linger, test_linger);
   ASSERT_EQ(test_linger, 123);
 }
 
@@ -396,7 +396,7 @@ TEST_F(zmqcpp_fixture, test_socket_setsockopt_invalid_type) {
   Socket test_sock(ctx, sub);
   ASSERT_ANY_THROW(test_sock.setsockopt(subscribe, 123));
   ASSERT_ANY_THROW(test_sock.setsockopt(affinity, 123));
-  ASSERT_ANY_THROW(test_sock.setsockopt(linger, "throw"));
+  ASSERT_ANY_THROW(test_sock.setsockopt(zmqcpp::linger, "throw"));
 }
 
 TEST_F(zmqcpp_fixture, test_socket_getsockopt_invalid_type) {
@@ -406,16 +406,16 @@ TEST_F(zmqcpp_fixture, test_socket_getsockopt_invalid_type) {
   int32_t test_affinity = 0;
   ASSERT_ANY_THROW(test_sock.getsockopt(affinity, test_affinity));
   int64_t test_rcvbuf = 0;
-  ASSERT_ANY_THROW(test_sock.getsockopt(linger, test_rcvbuf));
+  ASSERT_ANY_THROW(test_sock.getsockopt(zmqcpp::linger, test_rcvbuf));
   std::string test_linger;
-  ASSERT_ANY_THROW(test_sock.getsockopt(linger, test_linger));
+  ASSERT_ANY_THROW(test_sock.getsockopt(zmqcpp::linger, test_linger));
 }
 
 TEST_F(zmqcpp_fixture, test_socket_send_noblock) {
   Context ctx;
 
   Socket test_sock(ctx, push);
-  test_sock.setsockopt(linger, 0);
+  test_sock.setsockopt(zmqcpp::linger, 0);
   #if (ZMQ_VERSION_MAJOR >= 3)
   test_sock.setsockopt(sndhwm, 10);
   #else
@@ -450,7 +450,7 @@ TEST_F(zmqcpp_fixture, test_poller_timeout) {
   Context ctx;
 
   Socket test_sock(ctx, pull);
-  test_sock.setsockopt(linger, 0);
+  test_sock.setsockopt(zmqcpp::linger, 0);
   test_sock.bind("tcp://*:4050");
 
   Poller test_poller;
@@ -508,6 +508,8 @@ TEST_F(zmqcpp_fixture, test_poller_multiple_sockets_single_poll) {
   test_poller.add(bind_sock1, pollin);
   test_poller.add(bind_sock2, pollin);
 
+  Sleep(100);
+
   ASSERT_TRUE(test_poller.poll());
   ASSERT_TRUE(test_poller.has_polled(bind_sock1));
   ASSERT_FALSE(test_poller.has_polled(bind_sock2));
@@ -548,6 +550,8 @@ TEST_F(zmqcpp_fixture, test_poller_multiple_sockets_multiple_poll) {
   Poller test_poller;
   test_poller.add(bind_sock1, pollin);
   test_poller.add(bind_sock2, pollin);
+
+  Sleep(100);
 
   ASSERT_TRUE(test_poller.poll());
   ASSERT_TRUE(test_poller.has_polled(bind_sock1));
@@ -592,6 +596,8 @@ TEST_F(zmqcpp_fixture, test_poller_remove_socket) {
   test_poller.add(bind_sock1, pollin);
   test_poller.add(bind_sock2, pollin);
   test_poller.remove(bind_sock2);
+
+  Sleep(100);
 
   ASSERT_TRUE(test_poller.poll());
   ASSERT_TRUE(test_poller.has_polled(bind_sock1));

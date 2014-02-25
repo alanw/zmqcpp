@@ -116,7 +116,19 @@
 #include <map>
 #include <algorithm>
 #include <stdexcept>
+
+#ifndef _MSC_VER
 #include <stdint.h>
+#else
+typedef __int8 int8_t;
+typedef unsigned __int8 uint8_t;
+typedef __int16 int16_t;
+typedef unsigned __int16 uint16_t;
+typedef __int32 int32_t;
+typedef unsigned __int32 uint32_t;
+typedef __int64 int64_t;
+typedef unsigned __int64 uint64_t;
+#endif
 
 namespace zmqcpp {
 
@@ -184,7 +196,7 @@ public:
   {
     MessageBuffer(void* data = 0, uint32_t size = 0) : data(data), size(size) {}
     bool empty() const {
-      return data == 0 && size == 0;
+      return size == 0;
     }
     void* data;
     uint32_t size;
@@ -717,6 +729,7 @@ public:
   }
 
 private:
+  Socket(Socket* sock); // prevents Socket(void*) from being used by accident
   Socket& operator = (const Socket&); // non copyable
 
   void* socket;
@@ -755,15 +768,19 @@ public:
     callbacks.erase(socket.socket);
   }
 
+#define VECTOR_DATA(v) (v.size() > 0 ? &v[0] : 0)
+
   bool poll() {
-    bool poll_socket = zmq_poll(items.data(), items.size(), -1) > 0;
+    bool poll_socket = zmq_poll(VECTOR_DATA(items), items.size(), -1) > 0;
     return poll_socket ? dispatch() : false;
   }
 
   bool poll(uint32_t timeout) {
-    bool poll_socket = zmq_poll(items.data(), items.size(), timeout) > 0;
+    bool poll_socket = zmq_poll(VECTOR_DATA(items), items.size(), timeout) > 0;
     return poll_socket ? dispatch() : false;
   }
+
+#undef VECTOR_DATA
 
   bool dispatch() {
     for (CallbackItems::const_iterator socket = callbacks.begin(), last = callbacks.end(); socket != last; ++socket) {
