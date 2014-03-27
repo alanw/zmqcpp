@@ -128,6 +128,9 @@ typedef __int32 int32_t;
 typedef unsigned __int32 uint32_t;
 typedef __int64 int64_t;
 typedef unsigned __int64 uint64_t;
+
+#pragma warning( push )
+#pragma warning( disable: 4996 4800 )
 #endif
 
 namespace zmqcpp {
@@ -620,7 +623,7 @@ private:
   }
 
 public:
-  Socket(void* socket = 0) : socket(socket), own_socket(false) {
+  explicit Socket(void* socket = 0) : socket(socket), own_socket(false) {
   }
 
   Socket(const Context& ctx, SocketType type) {
@@ -707,6 +710,10 @@ public:
     return zmq_connect(socket, addr.c_str()) == 0;
   }
 
+  bool bindorconnect(const std::string& addr) const {
+    return (zmq_bind(socket, addr.c_str()) == 0) || (zmq_connect(socket, addr.c_str()) == 0);
+  }
+
   bool send(const Message& msg, bool block = true) const {
     if (msg.empty()) {
       return true;
@@ -737,7 +744,6 @@ public:
   }
 
 private:
-  Socket(Socket* sock); // prevents Socket(void*) from being used by accident
   Socket& operator = (const Socket&); // non copyable
 
   void* socket;
@@ -792,7 +798,7 @@ public:
 
   bool dispatch() {
     for (CallbackItems::const_iterator socket = callbacks.begin(), last = callbacks.end(); socket != last; ++socket) {
-      if (has_polled(socket->first) && socket->second.first) {
+      if (has_polled(Socket(socket->first)) && socket->second.first) {
         socket->second.first(socket->second.second, Socket(socket->first));
       }
     }
@@ -825,5 +831,9 @@ private:
 
 
 } // zmqcpp
+
+#ifdef _MSC_VER
+#pragma warning( pop )
+#endif
 
 #endif // _ZMQCPP_H_
