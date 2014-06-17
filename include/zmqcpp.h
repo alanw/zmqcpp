@@ -710,10 +710,6 @@ public:
     return zmq_connect(socket, addr.c_str()) == 0;
   }
 
-  bool bindorconnect(const std::string& addr) const {
-    return (zmq_bind(socket, addr.c_str()) == 0) || (zmq_connect(socket, addr.c_str()) == 0);
-  }
-
   bool send(const Message& msg, bool block = true) const {
     if (msg.empty()) {
       return true;
