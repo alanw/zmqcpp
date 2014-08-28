@@ -146,7 +146,8 @@ enum SocketType {
   xpub = ZMQ_XPUB,
   xsub = ZMQ_XSUB,
   router = ZMQ_ROUTER,
-  dealer = ZMQ_DEALER
+  dealer = ZMQ_DEALER,
+  stream = ZMQ_STREAM
 };
 
 enum SocketOption {
