@@ -186,6 +186,7 @@ enum SocketOption {
   req_correlate = ZMQ_REQ_CORRELATE,
   req_relaxed = ZMQ_REQ_RELAXED,
   conflate = ZMQ_CONFLATE,
+  last_endpoint = ZMQ_LAST_ENDPOINT,
 };
 
 enum PollOption {
@@ -311,6 +312,14 @@ public:
     return parts.end();
   }
 
+  const_iterator get_current() const {
+      return current;
+  }
+
+  void reset_current() {
+      current = parts.begin();
+  }
+
   const zmq_msg_t& at(uint32_t i) const {
     return parts.at(i);
   }
@@ -325,7 +334,9 @@ public:
 
   void assign(const Message& msg, bool copy = true) {
     clear();
-    assign(msg.begin(), msg.end());
+    if (msg.size() > 0) {
+        assign(msg.begin(), msg.end());
+    }
   }
 
   template <typename Iter>
@@ -620,7 +631,7 @@ private:
   }
 
   bool option_string(SocketOption option) const {
-    return option == subscribe || option == unsubscribe || option == identity;
+    return option == subscribe || option == unsubscribe || option == identity || option == last_endpoint;
   }
 
 public:
@@ -648,8 +659,16 @@ public:
     }
   }
 
-  std::string last_error() const {
-    return zmq_strerror(zmq_errno());
+  int last_error() const {
+    return zmq_errno();
+  }
+
+  std::string last_error_str() const {
+    return zmq_strerror(last_error());
+  }
+
+  bool setsockopt(SocketOption option, const void* value, size_t value_size) const {
+    return zmq_setsockopt(socket, static_cast<int32_t>(option), value, value_size) == 0;
   }
 
   bool setsockopt(SocketOption option, int32_t value) const {
@@ -671,6 +690,10 @@ public:
       throw std::runtime_error("socket option: invalid option for data type.");
     }
     return zmq_setsockopt(socket, static_cast<int>(option), value.c_str(), value.length()) == 0;
+  }
+
+  bool getsockopt(SocketOption option, void* value, size_t& value_size) const {
+    return zmq_getsockopt(socket, static_cast<int32_t>(option), value, &value_size) == 0;
   }
 
   bool getsockopt(SocketOption option, int32_t& value) const {
@@ -709,6 +732,10 @@ public:
 
   bool connect(const std::string& addr) const {
     return zmq_connect(socket, addr.c_str()) == 0;
+  }
+
+  bool disconnect(const std::string& addr) const {
+    return zmq_disconnect(socket, addr.c_str()) == 0;
   }
 
   bool send(const Message& msg, bool block = true) const {
