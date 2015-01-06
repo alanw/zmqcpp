@@ -722,7 +722,10 @@ public:
     if (zmq_getsockopt(socket, static_cast<int32_t>(option), buffer, &value_size) < 0) {
       return false;
     }
-    value.assign(buffer, value_size);
+
+    // The returned data is guaranteed null-terminated, so we may do this.
+    value = buffer;
+
     return true;
   }
 
