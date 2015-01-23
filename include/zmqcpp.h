@@ -187,6 +187,7 @@ enum SocketOption {
   req_relaxed = ZMQ_REQ_RELAXED,
   conflate = ZMQ_CONFLATE,
   last_endpoint = ZMQ_LAST_ENDPOINT,
+  xpub_verbose = ZMQ_XPUB_VERBOSE,
 };
 
 enum PollOption {
@@ -372,6 +373,11 @@ public:
     }
     current = parts.begin();
     return position;
+  }
+
+  iterator erase(iterator position) {
+      zmq_msg_close(const_cast<zmq_msg_t*>(&(*position)));
+      return parts.erase(position);
   }
 
   Message& operator = (const Message& msg) {
@@ -611,7 +617,7 @@ private:
            option == rcvmore || option == fd || option == events ||
            option == immediate || option == probe_router ||
            option == req_correlate || option == req_relaxed ||
-           option == conflate;
+           option == conflate || option == xpub_verbose;
     #else
     return option == linger || option == reconnect_ivl ||
            option == reconnect_ivl_max || option == backlog ||
@@ -768,6 +774,10 @@ public:
       msg.push(part);
     }
     return true;
+  }
+
+  inline void* getSocket() {
+    return socket;
   }
 
 private:
