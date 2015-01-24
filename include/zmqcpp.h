@@ -187,7 +187,7 @@ enum SocketOption {
   req_relaxed = ZMQ_REQ_RELAXED,
   conflate = ZMQ_CONFLATE,
   last_endpoint = ZMQ_LAST_ENDPOINT,
-  xpub_verbose = ZMQ_XPUB_VERBOSE,
+  xpub_verbose = ZMQ_XPUB_VERBOSE
 };
 
 enum PollOption {

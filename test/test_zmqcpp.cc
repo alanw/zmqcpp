@@ -508,7 +508,11 @@ TEST_F(zmqcpp_fixture, test_poller_multiple_sockets_single_poll) {
   test_poller.add(bind_sock1, pollin);
   test_poller.add(bind_sock2, pollin);
 
+  #ifdef _MSC_VER
   Sleep(100);
+  #else
+  usleep(100000);
+  #endif
 
   ASSERT_TRUE(test_poller.poll());
   ASSERT_TRUE(test_poller.has_polled(bind_sock1));
@@ -551,7 +555,11 @@ TEST_F(zmqcpp_fixture, test_poller_multiple_sockets_multiple_poll) {
   test_poller.add(bind_sock1, pollin);
   test_poller.add(bind_sock2, pollin);
 
+  #ifdef _MSC_VER
   Sleep(100);
+  #else
+  usleep(100000);
+  #endif
 
   ASSERT_TRUE(test_poller.poll());
   ASSERT_TRUE(test_poller.has_polled(bind_sock1));
@@ -597,7 +605,11 @@ TEST_F(zmqcpp_fixture, test_poller_remove_socket) {
   test_poller.add(bind_sock2, pollin);
   test_poller.remove(bind_sock2);
 
+  #ifdef _MSC_VER
   Sleep(100);
+  #else
+  usleep(100000);
+  #endif
 
   ASSERT_TRUE(test_poller.poll());
   ASSERT_TRUE(test_poller.has_polled(bind_sock1));
